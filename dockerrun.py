@@ -17,6 +17,7 @@ import os
 import stat
 import string
 import collections
+from pwd import getpwnam
 
 create_kwargs = ('image', 'command', 'hostname', 'user',
                    'detach', 'stdin_open', 'tty', 'mem_limit',
@@ -58,6 +59,7 @@ class DockerOption(optparse.Option):
                 self.seen.add(dest)
                 action = "store"
             optparse.Option.take_action(self, action, dest, opt, value, values, parser)
+
 
 def main():
     parser = optparse.OptionParser(option_class=DockerOption)
@@ -154,6 +156,15 @@ def main():
                     template = string.Template(value)
                     value = template.substitute(options.variables)
                 effective_start_kwargs[arg_name] = value
+
+        # is a numeric id given for the user, or is it needed to resolve it ?
+        if 'user' in effective_create_kwargs and not effective_create_kwargs['user'].isdigit():
+            user = effective_create_kwargs['user']
+            try:
+                effective_create_kwargs['user'] = getpwnam(user).pw_uid
+            except KeyError:
+                print "user '%s' not found" % user
+                return 1
 
         if len(docker_kwargs) > 0:
             print "invalid arguments: %s" % docker_kwargs
