@@ -6,7 +6,7 @@ name: logger
 hostname: logger
 command: /usr/bin/logger 'i m alive'
 binds:
-  "/dev/log":
+  - "/dev/log":
         bind: /dev/log
         ro: False
 working_dir: /

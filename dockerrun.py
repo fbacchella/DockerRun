@@ -16,6 +16,7 @@ import tempfile
 import os
 import stat
 import string
+import collections
 
 create_kwargs = ('image', 'command', 'hostname', 'user',
                    'detach', 'stdin_open', 'tty', 'mem_limit',
@@ -97,6 +98,19 @@ def main():
         effective_create_kwargs = {}
         effective_start_kwargs = {}
 
+        # Converted the binding, must be given as an array of single-element hash
+        # transformed to OrderedDict, docker-py expect a dict
+        if 'binds' in docker_kwargs:
+            binds = docker_kwargs['binds']
+            if not isinstance(binds, list):
+                print "binding must be an array"
+                return 1
+            new_binds = collections.OrderedDict()
+            for bind in binds:
+                (key, value) = bind.items()[0]
+                new_binds[key] = value
+            docker_kwargs['binds'] = new_binds
+
         # if a script is given, save it as a temporary file
         if 'script' in docker_kwargs:
             if len(options.variables) > 0:
@@ -110,7 +124,7 @@ def main():
                 os.chmod(script_file.name, (stat.S_IRWXU|stat.S_IRWXG|stat.S_IRWXO) & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
                 docker_kwargs['command'] = [ script_file.name ]
             if 'binds' not in docker_kwargs:
-                docker_kwargs['binds'] = {}
+                docker_kwargs['binds'] = collections.OrderedDict()
             docker_kwargs['binds'][script_file.name] = {'bind': script_file.name, 'ro': True}
 
         if 'detach' in docker_kwargs and not docker_kwargs['detach']:
