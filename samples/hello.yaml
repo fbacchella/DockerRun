@@ -1,0 +1,16 @@
+# use it with 'dockerrun -v master $USER hello.yaml; docker logs hello'
+---
+image: centos:centos6
+name: hello
+hostname: hello
+command: /bin/bash
+working_dir: /
+stdin_open: True
+detach: True
+tty: False
+environment:
+    NAME: joe
+script: |
+    #!/bin/bash
+    echo "hello ${master}"
+    echo "my name is $$NAME"

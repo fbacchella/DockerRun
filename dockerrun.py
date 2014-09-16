@@ -69,9 +69,9 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    paths = []
+    allowed_paths = []
     for element in options.path.split(os.pathsep):
-        paths.append( os.path.normcase(os.path.abspath(element)) )
+        allowed_paths.append( os.path.normcase(os.path.abspath(element)) )
 
     docker = dockerlib.Client(base_url=options.url,
                                   version=options.api_version,
@@ -80,14 +80,15 @@ def main():
     for docker_file_name in args:
 
         # Check if the docker yaml file is in an allowed path
-        real_file_name = os.path.normcase(os.path.abspath(docker_file_name))
-        valid = False
-        for element in paths:
-            if os.path.commonprefix([element, real_file_name ]) == element:
-                valid = True
-        if not valid:
-            print "invalid yaml container: %s" % docker_file_name
-            return 1
+        if len(allowed_paths) > 0:
+            real_file_name = os.path.normcase(os.path.abspath(docker_file_name))
+            valid = False
+            for element in allowed_paths:
+                if os.path.commonprefix([element, real_file_name ]) == element:
+                    valid = True
+            if not valid:
+                print "invalid yaml container: %s" % docker_file_name
+                return 1
 
         #loads the file
         docker_file = open(docker_file_name, 'r')

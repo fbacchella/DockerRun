@@ -1,0 +1,15 @@
+# use it with 'dockerrun logger.yaml; tail /var/log/messages'
+#
+---
+image: centos:centos6
+name: logger
+hostname: logger
+command: /usr/bin/logger 'i m alive'
+binds:
+  "/dev/log":
+        bind: /dev/log
+        ro: False
+working_dir: /
+stdin_open: True
+detach: True
+tty: True
