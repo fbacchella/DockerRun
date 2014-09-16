@@ -19,19 +19,6 @@ import string
 import collections
 from pwd import getpwnam
 
-create_kwargs = ('image', 'command', 'hostname', 'user',
-                   'detach', 'stdin_open', 'tty', 'mem_limit',
-                   'ports', 'environment', 'dns', 'volumes',
-                   'volumes_from', 'network_disabled', 'name',
-                   'entrypoint', 'cpu_shares', 'working_dir',
-                   'memswap_limit')
-
-start_kwargs = ('container', 'binds', 'port_bindings', 'lxc_conf',
-        'publish_all_ports', 'links=', 'privileged',
-        'dns', 'dns_search', 'volumes_from', 'network_mode',
-        'restart_policy', 'cap_add', 'cap_drop')
-
-
 class DockerOption(optparse.Option):
     ACTIONS = optparse.Option.ACTIONS + ("store_first", "store_variable", )
     STORE_ACTIONS = optparse.Option.STORE_ACTIONS + ("store_first", "store_variable", )
