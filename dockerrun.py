@@ -89,11 +89,14 @@ def main():
             print "invalid yaml container: %s" % docker_file_name
             return 1
 
+        #loads the file
         docker_file = open(docker_file_name, 'r')
         docker_kwargs = yaml.load(docker_file)
+
         effective_create_kwargs = {}
         effective_start_kwargs = {}
 
+        # if a script is given, save it as a temporary file
         if 'script' in docker_kwargs:
             if len(options.variables) > 0:
                 template = string.Template(docker_kwargs.pop('script'))
