@@ -141,11 +141,19 @@ def main():
         #start with 1, 0 is 'self'
         for arg_name in inspect.getargspec(dockerlib.Client.create_container).args[1:]:
             if arg_name in docker_kwargs:
-                effective_create_kwargs[arg_name] = docker_kwargs.pop(arg_name)
+                value = docker_kwargs.pop(arg_name)
+                if isinstance(value, str) or isinstance(value, unicode):
+                    template = string.Template(value)
+                    value = template.substitute(options.variables)
+                effective_create_kwargs[arg_name] = value
         #start with 1, 0 is 'self'
         for arg_name in inspect.getargspec(dockerlib.Client.start).args[1:]:
             if arg_name in docker_kwargs:
-                effective_start_kwargs[arg_name] = docker_kwargs.pop(arg_name)
+                value = docker_kwargs.pop(arg_name)
+                if isinstance(value, str) or isinstance(value, unicode):
+                    template = string.Template(value)
+                    value = template.substitute(options.variables)
+                effective_start_kwargs[arg_name] = value
 
         if len(docker_kwargs) > 0:
             print "invalid arguments: %s" % docker_kwargs
