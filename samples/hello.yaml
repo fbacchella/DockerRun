@@ -7,10 +7,12 @@ command: /bin/bash
 working_dir: /
 stdin_open: True
 detach: True
-tty: False
+tty: True
 environment:
     NAME: joe
 script: |
     #!/bin/bash
     echo "hello ${master}"
     echo "my name is $$NAME"
+    exec /bin/bash
+user: ${environment.SUDO_UID}
