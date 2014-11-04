@@ -163,17 +163,22 @@ def run(docker, path, yamls, variables):
         if attach:
             os.execlp("docker", "docker", "attach", container['Id'])
 
-
-def purge(docker):
+def list_contenair(docker):
+    real_user = os.environ['SUDO_UID']
     for container in docker.containers(all=True):
-        docker.remove_container(container, force=True)
-    more_images = True
-    while more_images:
-        images = docker.images(all=True)
-        print images
-        more_images = len(images) > 0
-        if more_images:
-            docker.remove_image(images[0]['Id'], force=True)
+        info = docker.inspect_container(container)
+        docker_user = info['Config']['User']
+        if docker_user == real_user:
+            print "%s %s" % (info['Config']['Hostname'], container['Status'])
+
+def rm_contenair(docker, container, force=True):
+    info = docker.inspect_container(container)
+    docker_user = info['Config']['User']
+    real_user = os.environ['SUDO_UID']
+    if not docker_user == real_user:
+        print "not you're own container"
+
+    docker.remove_container(container, force=force)
 
 def attach(docker, container):
     info = docker.inspect_container(container)
@@ -218,8 +223,11 @@ def main():
     elif args[0] == "info":
         print docker.info()
         return 0
-    elif args[0] == "purge":
-        purge(docker)
+    elif args[0] == "list":
+        list_contenair(docker)
+        return 0
+    elif args[0] == "rm":
+        rm_contenair(docker, args[1])
         return 0
     elif args[0] == "attach":
         attach(docker, args[1])
