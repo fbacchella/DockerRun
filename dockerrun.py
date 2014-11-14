@@ -20,6 +20,19 @@ import collections
 from pwd import getpwnam
 import re
 
+
+class Verb(object):
+    verbs = {}
+
+    def __init__(self, name, numargs=0):
+        self.name = name
+        self.numargs = numargs
+
+    def __call__(self, f):
+        Verb.verbs[self.name] = (f, self.numargs)
+        return f
+
+
 # a template that allows . in variables name
 class DotTemplate(string.Template):
     delimiter = '$'
@@ -54,11 +67,15 @@ class DockerOption(optparse.Option):
             optparse.Option.take_action(self, action, dest, opt, value, values, parser)
 
 
-def run(docker, path, yamls, variables):
+@Verb('run', 1)
+def run(docker, path, variables, yamls):
+    """run a new container, using a predefined yaml"""
+    print variables
+    print yamls
     allowed_paths = []
     if path is not None:
         for element in path.split(os.pathsep):
-            allowed_paths.append( os.path.normcase(os.path.abspath(element)) )
+            allowed_paths.append(os.path.normcase(os.path.abspath(element)))
 
     for docker_file_name in yamls:
 
@@ -124,9 +141,9 @@ def run(docker, path, yamls, variables):
             docker_kwargs['binds'][script_file.name] = {'bind': script_file.name, 'ro': True}
 
         if 'detach' in docker_kwargs and not docker_kwargs['detach']:
-            attach = True
+            do_attach = True
         else:
-            attach = False
+            do_attach = False
 
         # some exceptions, given in create_container, should be used in start:
         if 'volumes_from' in docker_kwargs:
@@ -144,7 +161,7 @@ def run(docker, path, yamls, variables):
                 effective_start_kwargs[arg_name] = docker_kwargs.pop(arg_name)
 
         # is a numeric id given for the user, or is it needed to resolve it ?
-        if 'user' in effective_create_kwargs and not isinstance( effective_create_kwargs['user'], ( int, long ) ):
+        if 'user' in effective_create_kwargs and not isinstance(effective_create_kwargs['user'], (int, long)):
             user = effective_create_kwargs['user']
             try:
                 effective_create_kwargs['user'] = getpwnam(user).pw_uid
@@ -160,18 +177,26 @@ def run(docker, path, yamls, variables):
             print "warning: %s" % container.Warnings
         docker.start(container, **effective_start_kwargs)
 
-        if attach:
+        if do_attach:
             os.execlp("docker", "docker", "attach", container['Id'])
+    return 0
 
+
+@Verb('list')
 def list_contenair(docker):
+    """return the list of active contenaire"""
     real_user = os.environ['SUDO_UID']
     for container in docker.containers(all=True):
         info = docker.inspect_container(container)
         docker_user = info['Config']['User']
         if docker_user == real_user:
             print "%s %s" % (info['Config']['Hostname'], container['Status'])
+    return 0
 
+
+@Verb('rm', numargs=2)
 def rm_contenair(docker, container, force=True):
+    """remove a container, given is id or name"""
     info = docker.inspect_container(container)
     docker_user = info['Config']['User']
     real_user = os.environ['SUDO_UID']
@@ -179,8 +204,12 @@ def rm_contenair(docker, container, force=True):
         print "not you're own container"
 
     docker.remove_container(container, force=force)
+    return 0
 
+
+@Verb('attach', numargs=2)
 def attach(docker, container):
+    """attach to a running container"""
     info = docker.inspect_container(container)
     docker_user = info['Config']['User']
     real_user = os.environ['SUDO_UID']
@@ -188,9 +217,19 @@ def attach(docker, container):
         os.execlp("docker", "docker", "attach", container)
     else:
         print "not you're own container"
+    return 0
+
 
 def main():
-    parser = optparse.OptionParser(option_class=DockerOption)
+    help_header = "[args]* 'verb' [verb_args]*\n"
+    for (verb, (function, numargs)) in Verb.verbs.items():
+        if function.__doc__ is None:
+            doc = ""
+        else:
+            doc = ": %s" % function.__doc__
+        help_header += "%s%s\n" % (verb, doc)
+
+    parser = optparse.OptionParser(option_class=DockerOption, usage=help_header)
     parser.add_option("-p", "--p", dest="path", help="allowed path for yaml files", default=None, action="store_first")
     parser.add_option("-u", "--url", dest="url", help="base URL for docker connection", default=None, action="store")
     parser.add_option("-s", "--socket", dest="socket", help="docker socket", default=None, action="store")
@@ -217,24 +256,24 @@ def main():
     for (name, value) in os.environ.items():
         options.variables['environment.%s' % name] = value
 
-    if args[0] == "run":
-        run(docker, options.path, args[1:], options.variables)
-        return 0
-    elif args[0] == "info":
-        print docker.info()
-        return 0
-    elif args[0] == "list":
-        list_contenair(docker)
-        return 0
-    elif args[0] == "rm":
-        rm_contenair(docker, args[1])
-        return 0
-    elif args[0] == "attach":
-        attach(docker, args[1])
-        return 0
-    else:
-        print "no action given"
+    if len(args) == 0:
+        parser.print_help()
         return 1
+    elif args[0] not in Verb.verbs:
+        print "unknow verb %s, allowed verbs are %s" % (args[0], Verb.verbs.keys())
+    else:
+        verb = args[0]
+        if verb in Verb.verbs:
+            (f, numargs) = Verb.verbs[verb]
+            if len(args) < numargs:
+                print "not enough argument for %s" % verb
+                if f.__doc__ is not None:
+                    print f.__doc__
+                return 1
+            if verb == 'run':
+                return f(docker, options.path, options.variables, *[args[1:]])
+            else:
+                return f(docker, *args[1:])
 
 # no global name space pollution
 if __name__ == '__main__':
