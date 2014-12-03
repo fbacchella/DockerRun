@@ -70,8 +70,6 @@ class DockerOption(optparse.Option):
 @Verb('run', 1)
 def run(docker, path, variables, yamls):
     """run a new container, using a predefined yaml"""
-    print variables
-    print yamls
     allowed_paths = []
     if path is not None:
         for element in path.split(os.pathsep):
