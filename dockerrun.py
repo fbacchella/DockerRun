@@ -14,12 +14,12 @@ except ImportError:
 import inspect
 import tempfile
 import os
+import sys
 import stat
 import string
 import collections
 from pwd import getpwnam
 import re
-
 
 class Verb(object):
     verbs = {}
@@ -240,7 +240,15 @@ def main():
     # Override -p with content of DOCKERRUN_YAMLPATH
     # it's used in sudoers
     if 'SUDO_COMMAND' in os.environ:
-        if 'DOCKERRUN_YAMLPATH' in os.environ:
+        # Check that SUDO_COMMAND was ourself
+        # bash -s|-i also set SUDO_COMMAND
+        run_command = os.path.basename(os.path.abspath(sys.argv[0]))
+        sudo_command = os.path.basename(os.path.abspath(os.environ['SUDO_COMMAND'].split(' ')[0]))
+        # argv is not the current file, not launched with sudo .../dockerrun
+        # it's not our duty to check any more
+        if run_command != sudo_command:
+            pass
+        elif 'DOCKERRUN_YAMLPATH' in os.environ:
             options.path = os.environ['DOCKERRUN_YAMLPATH']
         else:
             print "run in sudo but not DOCKERRUN_YAMLPATH defined"
