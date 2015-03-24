@@ -6,6 +6,7 @@ import sys
 
 import optparse
 import docker as dockerlib
+import dockerpty
 import yaml
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
@@ -138,10 +139,20 @@ def run(docker, path, variables, yamls):
                 docker_kwargs['binds'] = collections.OrderedDict()
             docker_kwargs['binds'][script_file.name] = {'bind': script_file.name, 'ro': True}
 
+        do_rm = False
         if 'detach' in docker_kwargs and not docker_kwargs['detach']:
             do_attach = True
+            if 'rm' in docker_kwargs and docker_kwargs['rm']:
+                do_rm = docker_kwargs.pop('rm', False)
         else:
             do_attach = False
+            docker.docker_kwargs('rm', None)
+
+        # list of capability to drop or add
+        if 'cap_drop' in docker_kwargs and isinstance(docker_kwargs['cap_drop'], list):
+            effective_start_kwargs['cap_drop'] = docker_kwargs.pop('cap_drop')
+        if 'cap_add' in docker_kwargs and isinstance(docker_kwargs['cap_drop'], list):
+            effective_start_kwargs['cap_add'] = docker_kwargs.pop('cap_add')
 
         # some exceptions, given in create_container, should be used in start:
         if 'volumes_from' in docker_kwargs:
@@ -173,10 +184,14 @@ def run(docker, path, variables, yamls):
         container = docker.create_container(**effective_create_kwargs)
         if container['Warnings'] is not None:
             print "warning: %s" % container.Warnings
-        docker.start(container, **effective_start_kwargs)
 
         if do_attach:
-            os.execlp("docker", "docker", "attach", container['Id'])
+            dockerpty.start(docker, container, **effective_start_kwargs)
+            if do_rm:
+                docker.remove_container(container, v=True)
+        else:
+            docker.start(container, **effective_start_kwargs)
+
     return 0
 
 
