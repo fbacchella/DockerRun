@@ -99,17 +99,35 @@ def run(docker, path, variables, yamls):
                 print "invalid yaml container: %s" % docker_file_name
                 return 1
 
-        #loads the file
+        # First load of the yaml fileto check allowed variables values
         with open(docker_file_name, 'r') as docker_file:
             content = docker_file.read()
             content = re.sub(r'^#.*\n', '\n', content)
-            template = DotTemplate(content)
-            try:
-                content = template.substitute(variables)
-            except KeyError as e:
-                print e
-            docker_kwargs = yaml.load(content)
+            docker_conf = yaml.load(content)
+            if 'variables' in docker_conf:
+                for (key, value) in docker_conf['variables'].items():
+                    if key not in variables:
+                        print "undefined variable '%s'" % key
+                        return 1
+                    #The variable check is a string, the filter is a regex
+                    if type(value) == str or type(value) == unicode:
+                        if re.match("^" + value + "$", variables[key]) is None:
+                            print "variable %s not a valid value: '%s'" % (key, variables[key])
+                            return 1
+                    # it's a list, search in allowed values
+                    elif type(value) == list:
+                        if not variables[key] in value:
+                            print "variable %s not an allowed value" % key
+                            return 1
 
+        # now again but with variable substitution
+        template = DotTemplate(content)
+        try:
+            content = template.substitute(variables)
+        except KeyError as e:
+            print "unresolver variable %s" % e
+
+        docker_kwargs = yaml.load(content)
         effective_create_kwargs = {}
         effective_start_kwargs = {}
 

@@ -18,5 +18,23 @@ The content of /etc/dockerrun/environment should then be :
 The yaml files can contains variable that will be resolved at container creation time. A variable is set
 with a `-v name value` argument. The environment variable are available as `environment.*name*`
 
+Variable content can be check with a variables section in the yaml file. For each given variable, 3 different check can
+be done:
+
+ * empty value, check the variable is given
+ * a regex, the whole variable will need to match it
+ * a list, the variable must be one of the given values
+
+For example:
+
+    ...
+    variables:
+        v1:
+        v2: "[a-zA-Z]+"
+        v3:
+            - one
+            - two
+            - three
+
 It also allow to attach to a container if the `user value` is equal to the user who launched the command, read
 from `SUDO_UID`
