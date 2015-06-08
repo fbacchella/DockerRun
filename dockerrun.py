@@ -97,10 +97,10 @@ def run(docker, path, variables, yamls):
                 if os.path.commonprefix([element, real_file_name]) == element:
                     valid = True
             if not valid:
-                print "invalid yaml container: %s" % docker_file_name
+                print >> sys.stderr, "invalid yaml container: %s" % docker_file_name
                 return 1
 
-        # First load of the yaml fileto check allowed variables values
+        # First load of the yaml file to check allowed variables values
         with open(docker_file_name, 'r') as docker_file:
             content = docker_file.read()
             content = re.sub(r'^#.*\n', '\n', content)
@@ -108,17 +108,17 @@ def run(docker, path, variables, yamls):
             if 'variables' in docker_conf:
                 for (key, value) in docker_conf['variables'].items():
                     if key not in variables:
-                        print "undefined variable '%s'" % key
+                        print >> sys.stderr,  "undefined variable '%s'" % key
                         return 1
                     #The variable check is a string, the filter is a regex
                     if type(value) == str or type(value) == unicode:
                         if re.match("^" + value + "$", variables[key]) is None:
-                            print "variable %s not a valid value: '%s'" % (key, variables[key])
+                            print >> sys.stderr,  "variable %s not a valid value: '%s'" % (key, variables[key])
                             return 1
                     # it's a list, search in allowed values
                     elif type(value) == list:
                         if not variables[key] in value:
-                            print "variable %s not an allowed value" % key
+                            print >> sys.stderr,  "variable %s not an allowed value" % key
                             return 1
 
         # now again but with variable substitution
@@ -126,7 +126,8 @@ def run(docker, path, variables, yamls):
         try:
             content = template.substitute(variables)
         except KeyError as e:
-            print "unresolver variable %s" % e
+            print >> sys.stderr, "unresolved variable %s" % e
+            return 1
 
         docker_kwargs = yaml.load(content)
         effective_create_kwargs = {}
@@ -137,7 +138,7 @@ def run(docker, path, variables, yamls):
         if 'binds' in docker_kwargs:
             binds = docker_kwargs['binds']
             if not isinstance(binds, list):
-                print "binding must be an array"
+                print >> sys.stderr,  "binding must be an array"
                 return 1
             new_binds = collections.OrderedDict()
             for bind in binds:
@@ -194,15 +195,15 @@ def run(docker, path, variables, yamls):
             try:
                 effective_create_kwargs['user'] = getpwnam(user).pw_uid
             except KeyError:
-                print "user '%s' not found" % user
+                print >> sys.stderr, "user '%s' not found" % user
                 return 1
 
         if len(docker_kwargs) > 0:
-            print "invalid argument: %s" % docker_kwargs
+            print >> sys.stderr, "invalid argument: %s" % docker_kwargs
             return 1
         container = docker.create_container(**effective_create_kwargs)
         if container['Warnings'] is not None:
-            print "warning: %s" % container.Warnings
+            print >> sys.stderr, "warning: %s" % container.Warnings
 
         if do_attach:
             try:
@@ -236,13 +237,13 @@ def rm_contenair(docker, container, force=True):
     docker_user = info['Config']['User']
     real_user = os.environ['SUDO_UID']
     if not docker_user == real_user:
-        print "not you're own container"
+        print >> sys.stderr, "not you're own container"
 
     docker.remove_container(container, force=force)
     return 0
 
 
-@Verb('attach', numargs=2)
+@Verb('attach', numargs=1)
 def attach(docker, container):
     """attach to a running container"""
     info = docker.inspect_container(container)
@@ -251,7 +252,7 @@ def attach(docker, container):
     if docker_user == real_user:
         os.execlp("docker", "docker", "attach", container)
     else:
-        print "not you're own container"
+        print >> sys.stderr, "not you're own container"
     return 0
 
 
@@ -288,7 +289,7 @@ def main():
         elif 'DOCKERRUN_YAMLPATH' in os.environ:
             options.path = os.environ['DOCKERRUN_YAMLPATH']
         else:
-            print "run in sudo but not DOCKERRUN_YAMLPATH defined"
+            print >> sys.stderr, "run in sudo but not DOCKERRUN_YAMLPATH defined"
             return 1
     docker = dockerlib.Client(base_url=options.url,
                               version=options.api_version,
@@ -303,13 +304,13 @@ def main():
         parser.print_help()
         return 1
     elif args[0] not in Verb.verbs:
-        print "unknow verb %s, allowed verbs are %s" % (args[0], Verb.verbs.keys())
+        print >> sys.stderr, "unknow verb %s, allowed verbs are %s" % (args[0], Verb.verbs.keys())
     else:
         verb = args[0]
         if verb in Verb.verbs:
             (f, numargs) = Verb.verbs[verb]
             if len(args) < numargs:
-                print "not enough argument for %s" % verb
+                print >> sys.stderr, "not enough argument for %s" % verb
                 if f.__doc__ is not None:
                     print f.__doc__
                 return 1
