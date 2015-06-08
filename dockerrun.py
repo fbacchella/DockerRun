@@ -282,7 +282,20 @@ def list_contenair(docker):
         info = docker.inspect_container(container)
         docker_user = info['Config']['User']
         if docker_user == real_user:
-            print "%s %s" % (info['Config']['Hostname'], container['Status'])
+            print "%s %s %s" % (info['Name'][1:], info['Config']['Hostname'], container['Status'])
+    return 0
+
+
+@Verb('start', numargs=1)
+def start(docker, container):
+    """start a container"""
+    info = docker.inspect_container(container)
+    docker_user = info['Config']['User']
+    real_user = os.environ['SUDO_UID']
+    if docker_user == real_user:
+        os.execlp("docker", "docker", "attach", container)
+    else:
+        print >> sys.stderr, "not you're own container"
     return 0
 
 
