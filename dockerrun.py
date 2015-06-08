@@ -143,7 +143,11 @@ def run(docker, path, variables, yamls):
             new_binds = collections.OrderedDict()
             for bind in binds:
                 (key, value) = bind.items()[0]
-                new_binds[key] = value
+                # now inverse the source and destination
+                # the docker api is incoherent between port bind and mount bind
+                source_binding = value.pop('bind', key)
+                value['bind'] = key
+                new_binds[source_binding] = value
             docker_kwargs['binds'] = new_binds
 
         # if a script is given, save it as a temporary file
