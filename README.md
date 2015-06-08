@@ -4,6 +4,8 @@ It parses some yaml files and construct container as described.
 
 It's made to be used through sudo, as it can take a path of allowed directory for yaml description files.
 
+Sudo settings
+-------------
 To use it, one should add in /etc/sudoers.d/docker:
 
     Cmnd_Alias DOCKER_COMMANDS = /usr/bin/dockerrun *
@@ -14,6 +16,9 @@ To use it, one should add in /etc/sudoers.d/docker:
 
 The content of /etc/dockerrun/environment should then be :
     DOCKERRUN_YAMLPATH=/etc/dockerrun
+
+Variables
+---------
 
 The yaml files can contains variable that will be resolved at container creation time. A variable is set
 with a `-v name value` argument. The environment variable are available as `environment.*name*`
@@ -38,3 +43,68 @@ For example:
 
 It also allow to attach to a container if the `user value` is equal to the user who launched the command, read
 from `SUDO_UID`
+
+Common settings
+---------------
+
+A lot of attributes have the same meaning that in docker create/ docker run, they are :
+
+* image
+* hostname
+* name
+* command
+* binds
+* rm
+* user
+
+Attach a tty
+------------
+The default setting is to create a tty and attach an interactive console to the command.
+To create a detached container, just set `detach` to `True`.
+
+Network bindings
+----------------
+Binding can be added using the parameter port_bindings
+
+It can take 3 value:
+
+ * None, it generate a direct badding
+ * a integer, it generate a tcp port redirection, listening on any IP
+ * a dictionnary, it takes the following arguments:
+ 
+    * port: the outside listenning port
+    * protocol: the listening protocol, tcp or udp (tcp if missing)
+    * range: a port range, that can be written as start-stop or start,count
+    
+Example:
+
+    port_bindings:
+       80:
+       22: 2222
+       10000: 
+          range: ${port_base}, 100
+          proto: tcp
+          host: 127.0.0.1
+
+Mount bindings
+--------------
+A list of mount can be given using the parameter binds
+
+It's a array of mapping
+For each internal mount point, a set of attributes is given:
+
+* bind: what is the source of the mount point
+* ro: is mount read-only ?
+
+If the attribute bind is not given, if default to name of the mapping
+
+Example:
+
+    binds:
+        - /data:
+            bind: "/data/playground/${environment.SUDO_USER}/${name}"
+        - /etc/nsswitch.conf:
+            bind: /etc/nsswitch.conf
+            ro: true
+    
+
