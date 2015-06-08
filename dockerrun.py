@@ -2,8 +2,6 @@
 
 __author__ = 'Fabrice Bacchella'
 
-import sys
-
 import optparse
 import docker as dockerlib
 import dockerpty
