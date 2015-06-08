@@ -21,6 +21,7 @@ import string
 import collections
 from pwd import getpwnam
 import re
+import socket
 
 class Verb(object):
     verbs = {}
@@ -197,16 +198,19 @@ def run(docker, path, variables, yamls):
                 return 1
 
         if len(docker_kwargs) > 0:
-            print "invalid arguments: %s" % docker_kwargs
+            print "invalid argument: %s" % docker_kwargs
             return 1
         container = docker.create_container(**effective_create_kwargs)
         if container['Warnings'] is not None:
             print "warning: %s" % container.Warnings
 
         if do_attach:
-            dockerpty.start(docker, container, **effective_start_kwargs)
-            if do_rm:
-                docker.remove_container(container, v=True)
+            try:
+                dockerpty.start(docker, container, **effective_start_kwargs)
+                if do_rm:
+                    docker.remove_container(container, v=True)
+            except socket.error:
+                print >> sys.stderr, "container detached"
         else:
             docker.start(container, **effective_start_kwargs)
 
