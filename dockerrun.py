@@ -132,6 +132,7 @@ def run(docker, path, variables, yamls):
         docker_kwargs = yaml.load(content)
         effective_create_kwargs = {}
         effective_start_kwargs = {}
+        effective_hostconfig_kwargs = {}
 
         # Converted the binding, must be given as an array of single-element hash
         # transformed to OrderedDict, docker-py expect a dict
@@ -174,9 +175,66 @@ def run(docker, path, variables, yamls):
 
         # some exceptions, given in create_container, should be used in start:
         if 'volumes_from' in docker_kwargs:
-            effective_start_kwargs['volumes_from'] = docker_kwargs.pop('volumes_from')
+            effective_hostconfig_kwargs['volumes_from'] = docker_kwargs.pop('volumes_from')
         if 'dns' in docker_kwargs:
-            effective_start_kwargs['dns'] = docker_kwargs.pop('dns')
+            effective_hostconfig_kwargs['dns'] = docker_kwargs.pop('dns')
+
+        # needs to manage port binding
+        # it's dict of mapping
+        # valid values for key is d+((-d+)|,d+)?(|tcp|udp)
+        # valid values for destination is None, port, or a array of [host, port]
+        # If a range was given, auto-increment destination
+        if 'port_bindings' in docker_kwargs:
+            effective_create_kwargs['ports'] = []
+            port_bindings = {}
+            for (port, port_definition) in docker_kwargs.pop('port_bindings').items():
+                # If nothing, just a direct mapping
+                if port_definition is None:
+                    proto = "tcp"
+                    listen_host = None
+                    listen_ports = (port, )
+                # if a plain integer, a one to one mapping
+                elif type(port_definition) == int:
+                    proto = "tcp"
+                    listen_host = None
+                    listen_ports = (port_definition, )
+                else:
+                    proto = port_definition.pop('protocol', 'tcp')
+                    listen_host = port_definition.pop('host', None)
+                    listen_range = port_definition.pop('range', None)
+                    listen_ports = port_definition.pop('port', None)
+                    if listen_ports is None and range is None:
+                        listen_ports = (port, )
+                    elif listen_ports is not None and range is not None:
+                        print >> sys.stderr, "port mapping %d given both range and port" % port
+                        return 1
+                    elif listen_ports is not None:
+                        listen_ports = (listen_ports, )
+                    elif listen_range is not None:
+                        # we got a range
+                        # it's  start,count
+                        if listen_range.rfind(",") > 0:
+                            listen_range = listen_range.split(",")
+                            listen_ports = range(int(listen_range[0]), int(listen_range[0]) + int(listen_range[1]))
+                        # or it start-stop
+                        elif listen_range.rfind("-") > 0:
+                            listen_range = listen_range.split("-")
+                            listen_ports = range(int(listen_range[0]), int(listen_range[1]) + 1)
+                    else:
+                        print >> sys.stderr, "port mapping %d given neither range and port" % port
+                        return 1
+                for listen_port in listen_ports:
+                    effective_create_kwargs['ports'].append((port, proto))
+                    port_bindings["%d/%s" %(port, proto)] = (listen_host, listen_port)
+                    port += 1
+
+            effective_hostconfig_kwargs['port_bindings'] = port_bindings
+
+        # Extract argument for hostconfig
+        for arg_name in inspect.getargspec(dockerlib.utils.create_host_config).args:
+            if arg_name in docker_kwargs:
+                effective_hostconfig_kwargs[arg_name] = docker_kwargs.pop(arg_name)
+        effective_create_kwargs['host_config'] = dockerlib.utils.create_host_config(**effective_hostconfig_kwargs)
 
         #start with 1, 0 is 'self'
         for arg_name in inspect.getargspec(dockerlib.Client.create_container).args[1:]:
@@ -267,7 +325,7 @@ def main():
     parser.add_option("-p", "--p", dest="path", help="allowed path for yaml files", default=None, action="store_first")
     parser.add_option("-u", "--url", dest="url", help="base URL for docker connection", default=None, action="store")
     parser.add_option("-s", "--socket", dest="socket", help="docker socket", default=None, action="store")
-    parser.add_option("-a", "--api", dest="api_version", help="docker api version", default='1.13', action="store_first")
+    parser.add_option("-a", "--api", dest="api_version", help="docker api version", default='1.18', action="store_first")
     parser.add_option("-t", "--timeout", dest="timeout", help="docker timeout", default=20, action="store", type="int")
     parser.add_option("-v", "--variable", dest="variables", action="store_variable", type="string")
 
