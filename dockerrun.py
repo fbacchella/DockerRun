@@ -159,14 +159,8 @@ def run(docker, path, variables, yamls):
                 docker_kwargs['binds'] = collections.OrderedDict()
             docker_kwargs['binds'][script_file.name] = {'bind': script_file.name, 'ro': True}
 
-        do_rm = False
-        if 'detach' in docker_kwargs and not docker_kwargs['detach']:
-            do_attach = True
-            if 'rm' in docker_kwargs and docker_kwargs['rm']:
-                do_rm = docker_kwargs.pop('rm', False)
-        else:
-            do_attach = False
-            docker.docker_kwargs('rm', None)
+        do_attach = not docker_kwargs.pop('detach', False)
+        do_rm = docker_kwargs.pop('rm', False)
 
         # list of capability to drop or add
         if 'cap_drop' in docker_kwargs and isinstance(docker_kwargs['cap_drop'], list):
