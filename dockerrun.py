@@ -163,6 +163,9 @@ def run(docker, path, variables, yamls):
             docker_kwargs['binds'][script_file.name] = {'bind': script_file.name, 'ro': True}
 
         do_attach = not docker_kwargs.pop('detach', False)
+        docker_kwargs['tty'] = do_attach
+        docker_kwargs['stdin_open'] = do_attach
+
         do_rm = docker_kwargs.pop('rm', False)
 
         # list of capability to drop or add
