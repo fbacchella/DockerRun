@@ -4,6 +4,37 @@ It parses some yaml files and construct container as described.
 
 It's made to be used through sudo, as it can take a path of allowed directory for yaml description files.
 
+Common usage
+-------------
+
+dockerrun is intended to run from within sudo. Common usage is
+
+    Usage: [args]* 'verb' [verb_args]*
+    
+Current verbs are:
+
+ - run: run a new container, using a predefined yaml
+ - logs: show the stdout and stderr logs from a container
+ - start: start a container
+ - list: return the list of active contenaire
+ - attach: attach to a running container
+ - tail: follow stdout and stdin from a container, without attaching
+ - rm: remove a container, given is id or name
+
+Common args are :
+
+    -h, --help            show this help message and exit
+    -p PATH, --p=PATH     allowed path for yaml files
+    -u URL, --url=URL     base URL for docker connection
+    -s SOCKET, --socket=SOCKET
+                        docker socket
+    -a API_VERSION, --api=API_VERSION
+                        docker api version
+    -t TIMEOUT, --timeout=TIMEOUT
+                        docker timeout
+    -v VARIABLES, --variable=VARIABLES
+
+
 Sudo settings
 -------------
 To use it, one should add in /etc/sudoers.d/docker:

@@ -312,7 +312,7 @@ def list_contenair(docker):
 
 @Verb('stop', numargs=1)
 def stop(docker, container):
-    """start a container"""
+    """stop a container"""
     info = docker.inspect_container(container)
     real_user = os.environ['SUDO_USER']
     if check_contenair_user(info, real_user):
@@ -360,7 +360,7 @@ def attach(docker, container):
 
 @Verb('logs', numargs=1)
 def logs(docker, container):
-    """attach to a running container"""
+    """show the stdout and stderr logs from a container"""
     info = docker.inspect_container(container)
     real_user = os.environ['SUDO_USER']
     if check_contenair_user(info, real_user):
@@ -372,7 +372,7 @@ def logs(docker, container):
 
 @Verb('tail', numargs=1)
 def tail(docker, container):
-    """attach to a running container"""
+    """follow stdout and stdin from a container, without attaching"""
     info = docker.inspect_container(container)
     real_user = os.environ['SUDO_USER']
     if check_contenair_user(info, real_user):
