@@ -67,6 +67,17 @@ class DockerOption(optparse.Option):
             optparse.Option.take_action(self, action, dest, opt, value, values, parser)
 
 
+def check_contenair_user(info, user):
+    for i in info['Config']['Env']:
+        sep = i.index("=")
+        (var,value) = (i[:sep], i[sep+1:])
+        if var == 'CONTAINER_CREATOR':
+            if value == user:
+                return True
+        return False
+    return False
+
+
 @Verb('run', 1)
 def run(docker, path, variables, yamls):
     """run a new container, using a predefined yaml"""
@@ -102,7 +113,11 @@ def run(docker, path, variables, yamls):
         with open(docker_file_name, 'r') as docker_file:
             content = docker_file.read()
             content = re.sub(r'^#.*\n', '\n', content)
-            docker_conf = yaml.load(content)
+            try:
+                docker_conf = yaml.load(content)
+            except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
+                print >> sys.stderr,  e
+                return 1
             if 'variables' in docker_conf:
                 for (key, value) in docker_conf['variables'].items():
                     if key not in variables:
@@ -128,6 +143,8 @@ def run(docker, path, variables, yamls):
             return 1
 
         docker_kwargs = yaml.load(content)
+        docker_kwargs.pop('variables', None)
+
         effective_create_kwargs = {}
         effective_start_kwargs = {}
         effective_hostconfig_kwargs = {}
@@ -206,7 +223,7 @@ def run(docker, path, variables, yamls):
                     listen_ports = port_definition.pop('port', None)
                     if listen_ports is None and range is None:
                         listen_ports = (port, )
-                    elif listen_ports is not None and range is not None:
+                    elif listen_ports is not None and listen_range is not None:
                         print >> sys.stderr, "port mapping %d given both range and port" % port
                         return 1
                     elif listen_ports is not None:
@@ -246,6 +263,11 @@ def run(docker, path, variables, yamls):
             if arg_name in docker_kwargs:
                 effective_start_kwargs[arg_name] = docker_kwargs.pop(arg_name)
 
+        # don' forget to store the contenair creator
+        if not 'environment' in effective_create_kwargs:
+            effective_create_kwargs['environment'] = {}
+        effective_create_kwargs['environment']['CONTAINER_CREATOR'] = variables['environment.SUDO_USER']
+
         # is a numeric id given for the user, or is it needed to resolve it ?
         if 'user' in effective_create_kwargs and not isinstance(effective_create_kwargs['user'], (int, long)):
             user = effective_create_kwargs['user']
@@ -267,6 +289,8 @@ def run(docker, path, variables, yamls):
                 dockerpty.start(docker, container, **effective_start_kwargs)
                 if do_rm:
                     docker.remove_container(container, v=True)
+            except dockerlib.errors.APIError as e:
+                print >> sys.stderr, e
             except socket.error:
                 print >> sys.stderr, "container detached"
         else:
@@ -278,12 +302,23 @@ def run(docker, path, variables, yamls):
 @Verb('list')
 def list_contenair(docker):
     """return the list of active contenaire"""
-    real_user = os.environ['SUDO_UID']
+    real_user = os.environ['SUDO_USER']
     for container in docker.containers(all=True):
         info = docker.inspect_container(container)
-        docker_user = info['Config']['User']
-        if docker_user == real_user:
+        if check_contenair_user(info, real_user):
             print "%s %s %s" % (info['Name'][1:], info['Config']['Hostname'], container['Status'])
+    return 0
+
+
+@Verb('stop', numargs=1)
+def stop(docker, container):
+    """start a container"""
+    info = docker.inspect_container(container)
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
+        docker.stop(container)
+    else:
+        print >> sys.stderr, "not you're own container"
     return 0
 
 
@@ -291,10 +326,9 @@ def list_contenair(docker):
 def start(docker, container):
     """start a container"""
     info = docker.inspect_container(container)
-    docker_user = info['Config']['User']
-    real_user = os.environ['SUDO_UID']
-    if docker_user == real_user:
-        os.execlp("docker", "docker", "attach", container)
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
+        os.execlp("docker", "docker", "start", container)
     else:
         print >> sys.stderr, "not you're own container"
     return 0
@@ -304,12 +338,11 @@ def start(docker, container):
 def rm_contenair(docker, container, force=True):
     """remove a container, given is id or name"""
     info = docker.inspect_container(container)
-    docker_user = info['Config']['User']
-    real_user = os.environ['SUDO_UID']
-    if not docker_user == real_user:
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
+        docker.remove_container(container, force=force)
+    else:
         print >> sys.stderr, "not you're own container"
-
-    docker.remove_container(container, force=force)
     return 0
 
 
@@ -317,10 +350,34 @@ def rm_contenair(docker, container, force=True):
 def attach(docker, container):
     """attach to a running container"""
     info = docker.inspect_container(container)
-    docker_user = info['Config']['User']
-    real_user = os.environ['SUDO_UID']
-    if docker_user == real_user:
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
         os.execlp("docker", "docker", "attach", container)
+    else:
+        print >> sys.stderr, "not you're own container"
+    return 0
+
+
+@Verb('logs', numargs=1)
+def logs(docker, container):
+    """attach to a running container"""
+    info = docker.inspect_container(container)
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
+        print docker.logs(container, stdout=True, stderr=True, tail="all")
+    else:
+        print >> sys.stderr, "not you're own container"
+    return 0
+
+
+@Verb('tail', numargs=1)
+def tail(docker, container):
+    """attach to a running container"""
+    info = docker.inspect_container(container)
+    real_user = os.environ['SUDO_USER']
+    if check_contenair_user(info, real_user):
+        for l in docker.logs(container, stream=True, stdout=True, stderr=True, tail=5):
+            print l,
     else:
         print >> sys.stderr, "not you're own container"
     return 0
@@ -390,5 +447,8 @@ def main():
                 return f(docker, *args[1:])
 
 # no global name space pollution
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)
