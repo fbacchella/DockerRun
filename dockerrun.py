@@ -20,6 +20,7 @@ import collections
 from pwd import getpwnam
 import re
 import socket
+import traceback
 
 class Verb(object):
     verbs = {}
@@ -35,8 +36,47 @@ class Verb(object):
 
 # a template that allows . in variables name
 class DotTemplate(string.Template):
-    delimiter = '$'
-    idpattern = r'[_a-z][_a-z0-9\.]*'
+    pattern = r"""
+    \$(?:
+      {(?P<braced>[_a-z][_a-z0-9\.]*)}     |   # delimiter and a braced identifier
+      (?P<escaped>^$)                      |   # Escape sequence of two delimiters
+      (?P<named>^$)                        |   # delimiter and a Python identifier
+      (?P<invalid>^$)                          # Other ill-formed delimiter exprs
+    )
+    """
+
+
+# A dictionary that resolve string using a template and variables
+class TemplateDict(dict):
+
+    def __init__(self, variables, *args, **kwargs):
+        self.variables = variables
+        super(TemplateDict, self).__init__(*args, **kwargs)
+
+    def __getitem__(self, *args, **kwargs):
+        value = super(TemplateDict, self).__getitem__(*args, **kwargs)
+        return self.resolve(value)
+
+    def items(self, *args, **kwargs):
+        for (key, value) in super(TemplateDict, self).items(*args, **kwargs):
+            yield (key, self.resolve(value))
+
+    def pop(self, *args, **kwargs):
+        value = super(TemplateDict, self).pop(*args, **kwargs)
+        return self.resolve(value)
+
+    def resolve(self, value):
+        if isinstance(value, str):
+            return DotTemplate(value).substitute(self.variables)
+        elif isinstance(value, (list, tuple)):
+            return map(lambda x: self.resolve(x), value)
+        elif isinstance(value, dict):
+            return dict(map(lambda (x, y): (x, self.resolve(y)), value.items()))
+        else:
+            return value
+
+    def getraw(self, key):
+        return super(TemplateDict, self).__getitem__(key)
 
 
 class DockerOption(optparse.Option):
@@ -111,39 +151,39 @@ def run(docker, path, variables, yamls):
 
         # First load of the yaml file to check allowed variables values
         with open(docker_file_name, 'r') as docker_file:
-            content = docker_file.read()
-            content = re.sub(r'^#.*\n', '\n', content)
             try:
-                docker_conf = yaml.load(content)
+                docker_conf = yaml.load(docker_file_name)
             except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
                 print >> sys.stderr,  e
                 return 1
-            if 'variables' in docker_conf:
-                for (key, value) in docker_conf['variables'].items():
-                    if key not in variables:
-                        print >> sys.stderr,  "undefined variable '%s'" % key
-                        return 1
-                    #The variable check is a string, the filter is a regex
-                    if type(value) == str or type(value) == unicode:
-                        if re.match("^" + value + "$", variables[key]) is None:
-                            print >> sys.stderr,  "variable %s not a valid value: '%s'" % (key, variables[key])
-                            return 1
-                    # it's a list, search in allowed values
-                    elif type(value) == list:
-                        if not variables[key] in value:
-                            print >> sys.stderr,  "variable %s not an allowed value" % key
-                            return 1
 
-        # now again but with variable substitution
-        template = DotTemplate(content)
-        try:
-            content = template.substitute(variables)
-        except KeyError as e:
-            print >> sys.stderr, "unresolved variable %s" % e
-            return 1
+        # Match variables against the filters
+        for (key, value) in docker_conf.pop('check', {}).items():
+            if key not in variables:
+                print >> sys.stderr,  "undefined variable '%s'" % key
+                return 1
+            #The variable check is a string, the filter is a regex
+            if type(value) == str or type(value) == unicode:
+                if re.match("^" + value + "$", variables[key]) is None:
+                    print >> sys.stderr,  "variable %s not a valid value: '%s'" % (key, variables[key])
+                    return 1
+            # it's a list, search in allowed values
+            elif type(value) == list:
+                if not variables[key] in value:
+                    print >> sys.stderr,  "variable %s not an allowed value" % key
+                    return 1
 
-        docker_kwargs = yaml.load(content)
-        docker_kwargs.pop('variables', None)
+        # resolve variables expression
+        for (var, expression) in docker_conf.pop('variables', {}).items():
+            try:
+                variables[var] = eval(expression, {}, variables)
+            except Exception as e:
+                print >> sys.stderr, "evaluation failed for %s:" % (expression)
+                for l in traceback.format_exception_only(type(e), e):
+                    print "    " + l,
+                    return 1
+
+        docker_kwargs = TemplateDict(variables, docker_conf)
 
         effective_create_kwargs = {}
         effective_start_kwargs = {}
@@ -263,7 +303,7 @@ def run(docker, path, variables, yamls):
             if arg_name in docker_kwargs:
                 effective_start_kwargs[arg_name] = docker_kwargs.pop(arg_name)
 
-        # don' forget to store the contenair creator
+        # don' forget to store the container creator
         if not 'environment' in effective_create_kwargs:
             effective_create_kwargs['environment'] = {}
         effective_create_kwargs['environment']['CONTAINER_CREATOR'] = variables['environment.SUDO_USER']
@@ -280,6 +320,8 @@ def run(docker, path, variables, yamls):
         if len(docker_kwargs) > 0:
             print >> sys.stderr, "invalid argument: %s" % docker_kwargs
             return 1
+        print effective_create_kwargs
+        print effective_start_kwargs
         container = docker.create_container(**effective_create_kwargs)
         if container['Warnings'] is not None:
             print >> sys.stderr, "warning: %s" % container.Warnings

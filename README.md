@@ -48,13 +48,16 @@ To use it, one should add in /etc/sudoers.d/docker:
 The content of /etc/dockerrun/environment should then be :
     DOCKERRUN_YAMLPATH=/etc/dockerrun
 
+It also allow to attach to a container if the `user value` is equal to the user who launched the command, read
+from `SUDO_UID`
+
 Variables
 ---------
 
 The yaml files can contains variable that will be resolved at container creation time. A variable is set
 with a `-v name value` argument. The environment variable are available as `environment.*name*`
 
-Variable content can be check with a variables section in the yaml file. For each given variable, 3 different check can
+Variable content can be check with a `check` section in the yaml file. For each given variable, 3 different check can
 be done:
 
  * empty value, check the variable is given
@@ -64,7 +67,7 @@ be done:
 For example:
 
     ...
-    variables:
+    check:
         v1:
         v2: "[a-zA-Z]+"
         v3:
@@ -72,8 +75,17 @@ For example:
             - two
             - three
 
-It also allow to attach to a container if the `user value` is equal to the user who launched the command, read
-from `SUDO_UID`
+It the template contains a `variables` section, it can define new variables. In this case, each element is a 
+new variable and a python expression that will resolve it, using the already defined variables.
+
+For example, if dockerrun is launched with `-v key 1` and the template containes:
+
+    variables:
+       v1: int(key) * 2
+       v2: {'1': 'a'}[key]
+
+it will add a variable `v1` with value `2` and `v2` with value `'a'`. All variable are strings and so must
+be converted before use a int or other types
 
 Common settings
 ---------------
