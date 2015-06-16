@@ -149,13 +149,14 @@ def run(docker, path, variables, yamls):
                 print >> sys.stderr, "invalid yaml container: %s" % docker_file_name
                 return 1
 
-        # First load of the yaml file to check allowed variables values
+        # Load the yaml docker file
         with open(docker_file_name, 'r') as docker_file:
             try:
-                docker_conf = yaml.load(docker_file_name)
+                docker_conf = yaml.safe_load(docker_file)
             except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
                 print >> sys.stderr,  e
                 return 1
+
 
         # Match variables against the filters
         for (key, value) in docker_conf.pop('check', {}).items():
@@ -320,8 +321,7 @@ def run(docker, path, variables, yamls):
         if len(docker_kwargs) > 0:
             print >> sys.stderr, "invalid argument: %s" % docker_kwargs
             return 1
-        print effective_create_kwargs
-        print effective_start_kwargs
+
         container = docker.create_container(**effective_create_kwargs)
         if container['Warnings'] is not None:
             print >> sys.stderr, "warning: %s" % container.Warnings
